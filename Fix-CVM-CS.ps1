@@ -90,7 +90,7 @@ function UnMount-OsasDataDisk {
     $vm = Get-AzVM -ResourceGroupName $ResourceGroup -Name $VMName
     $ddname = ($DataDiskID -replace '.*\/', '')
     Remove-AzVMDataDisk -VM $vm -Name $ddname
-    Update-AzVM -VM $vm -ResourceGroupName $rgName
+    Update-AzVM -VM $vm -ResourceGroupName $ResourceGroup
 }
 function Get-BLKeys {
     param (
@@ -146,13 +146,9 @@ Write-Host "Using Blank Managed Disk ID: $bdRID"
 $aDisk = $null
 foreach ($BLK in $BLKeys) {
     Write-Host "Starting work on $($BLK.DeviceName)"
-    # Move the bad VM's OS disk to the rescue VM
     $aDisk = Swap-Disk-To-Rescue -ResourceGroup $AVDRGName -VMName $BLK.DeviceName -RescueVMName $RescueVMName -BlankDiskID $bdRID
+    $s = Invoke-AzVMRunCommand -ResourceGroupName RGNAME -VMName VMNAME -CommandId 'RunPowerShellScript' -ScriptPath $OperationsScriptPath -Parameter @{BLRecoveryKey = $Token }
+    $s.Value[0].Message
+    Swap-Disk-From-Rescue -ResourceGroup $AVDRGName -VMName $VMName -aDiskID $aDisk
 }
-
-# Run the operations script on the rescue VM
-#$s = Invoke-AzVMRunCommand -ResourceGroupName RGNAME -VMName VMNAME -CommandId 'RunPowerShellScript' -ScriptPath $OperationsScriptPath -Parameter @{BLRecoveryKey = $Token }
-#$s.Value[0].Message
-# Move the OS disk back to the bad VM
-#Swap-Disk-From-Rescue -ResourceGroup $AVDRGName -VMName $VMName -aDiskID $aDisk
 #end region main
