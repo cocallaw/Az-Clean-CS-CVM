@@ -5,7 +5,9 @@ param(
     [Parameter(Mandatory)]
     [string]$AVDRGName,
     [Parameter(Mandatory)]
-    [string]$RescueVMName
+    [string]$RescueVMName,
+    [Parameter(Mandatory)]
+    [string]$BlankDiskName
 )
 #end region parameters
 #region functions
@@ -22,8 +24,11 @@ function Swap-Disk-To-Rescue {
     )
     #Get the properties of the OS disk on the bad VM
     $aDiskID = (get-azvm -ResourceGroupName $ResourceGroup -name $VMName).StorageProfile.OsDisk.ManagedDisk.id
+    Write-Host "Swapping Disk Blank Disk in for $aDiskID on $VMName"
     Swap-OSDisk -ResourceGroup $ResourceGroup -VMName $VMName -NewDisk $BlankDiskID
+    Write-Host "Mounting $aDiskID as a data disk on $RescueVMName"
     Mount-OSasDataDisk -ResourceGroup $ResourceGroup -VMName $RescueVMName -NewDataDisk $aDiskID
+    Write-Host "Disk $aDiskID is now mounted as a data disk on $RescueVMName"
     return $aDiskID
 }
 function Swap-Disk-From-Rescue {
@@ -49,9 +54,12 @@ function Swap-OSDisk {
         [string]$NewDisk
     )
     $vm = Get-AzVM -ResourceGroupName $ResourceGroup -Name $VMName
+    Write-Host "Stopping $VMName"
     Stop-AzVM -ResourceGroupName $vm.ResourceGroupName -Name $vm.Name -Force
     $disk = Get-AzDisk -ResourceGroupName $ResourceGroup -Name $NewDisk
+    Write-Host "Setting $NewDisk as the OS disk for $VMName"
     Set-AzVMOSDisk -VM $vm -ManagedDiskId $disk.Id -Name $disk.Name
+    Write-Host "Updating $VMName with the new OS disk"
     Update-AzVM -ResourceGroupName myResourceGroup -VM $vm
 }
 function Mount-OSasDataDisk {
@@ -67,8 +75,6 @@ function Mount-OSasDataDisk {
     $vm = Get-AzVM -ResourceGroupName $ResourceGroup -Name $VMName
     $vm = Add-AzVMDataDisk -CreateOption Attach -Lun 0 -VM $vm -ManagedDiskId $disk.Id
     Update-AzVM -VM $vm -ResourceGroupName $rgName
-    Set-AzVMOSDisk -VM $vm -ManagedDiskId $disk.Id -Name $disk.Name
-    Update-AzVM -ResourceGroupName myResourceGroup -VM $vm
 }
 function UnMount-OsasDataDisk {
     param (
@@ -85,10 +91,10 @@ function UnMount-OsasDataDisk {
     Update-AzVM -VM $vm -ResourceGroupName $rgName
 }
 function Get-BLKeys {
-    param {
+    param (
         [Parameter(Mandatory)]
         [string]$VMLPath
-    }
+    )
     $vmNames = Get-content -Path $VMLPath
     $devices = @()
     foreach ($vmName in $vmNames) {
@@ -117,14 +123,34 @@ $OperationsScriptPath = ".\Clean-CS-CVM.ps1"
 #end region variables
 #region main
 Write-Host "Connecting to Microsoft Graph with the necessary scopes"
-Connect-MgGraph -Scopes "Device.Read.All", "BitLockerKey.Read.All"
+try {
+    Connect-MgGraph -Scopes "Device.Read.All", "BitLockerKey.Read.All"
+}
+catch {
+    Write-Host "Failed to connect to Microsoft Graph with the necessary scopes"
+    exit
+}
 Write-Host "Getting BitLocker keys for VMs in file $VMListFilePath"
-[array]$BLKeys = Get-BLKeys VMLPath $VMListFilePath
-# Move the bad VM's OS disk to the rescue VM
-$aDisk = Swap-Disk-To-Rescue -ResourceGroup $AVDRGName -VMName $VMName -RescueVMName $RescueVMName -BlankDiskID $BlankDiskID
+[array]$BLKeys = Get-BLKeys -VMLPath $VMListFilePath
+Write-Host "Getting Blank Managed Disk Info for Rescue Swap"
+try {
+    $bdRID = (get-azdisk -ResourceGroupName $AVDRGName -Name $BlankDiskName).Id
+}
+catch {
+    Write-Host "Failed to get Blank Managed Disk Info for Rescue Swap"
+    exit
+}
+Write-Host "Using Blank Managed Disk ID: $bdRID"
+$aDisk = $null
+foreach ($BLK in $BLKeys) {
+    Write-Host "Starting work on $($BLK.DeviceName)"
+    # Move the bad VM's OS disk to the rescue VM
+    $aDisk = Swap-Disk-To-Rescue -ResourceGroup $AVDRGName -VMName $BLK.DeviceName -RescueVMName $RescueVMName -BlankDiskID $bdRID
+}
+
 # Run the operations script on the rescue VM
-$s = Invoke-AzVMRunCommand -ResourceGroupName <RGNAME> -VMName <VMNAME> -CommandId 'RunPowerShellScript' -ScriptPath $OperationsScriptPath -Parameter @{BLRecoveryKey = $Token }
-$s.Value[0].Message
+#$s = Invoke-AzVMRunCommand -ResourceGroupName RGNAME -VMName VMNAME -CommandId 'RunPowerShellScript' -ScriptPath $OperationsScriptPath -Parameter @{BLRecoveryKey = $Token }
+#$s.Value[0].Message
 # Move the OS disk back to the bad VM
-Swap-Disk-From-Rescue -ResourceGroup $AVDRGName -VMName $VMName -aDiskID $aDisk
+#Swap-Disk-From-Rescue -ResourceGroup $AVDRGName -VMName $VMName -aDiskID $aDisk
 #end region main
