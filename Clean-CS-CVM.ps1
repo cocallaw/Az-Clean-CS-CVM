@@ -54,8 +54,22 @@ else {
 #region bitlocker-decrypt
 Write-Host "Disabling BitLocker on $($LockedDrive.MountPoint)"
 Disable-BitLocker -MountPoint $LockedDrive.MountPoint
+$bitlockerStatus = Get-BitLockerVolume -MountPoint $LockedDrive.MountPoint
+while ($bitlockerStatus.VolumeStatus -ne "FullyDecrypted") {
+	Write-Host "Waiting for BitLocker to decrypt..."
+	Start-Sleep -Seconds 10
+	$bitlockerStatus = Get-BitLockerVolume -MountPoint $LockedDrive.MountPoint
+}
+Write-Host "BitLocker has been decrypted"
+Write-Host "Bringing Disk $($LockedDrive.DriveLetter) offline"
+# Define the drive letter
+$driveLetter = $LockedDrive.DriveLetter
+# Get the disk number associated with the drive letter
+$diskNumber = (Get-Partition | Where-Object DriveLetter -eq $driveLetter.Substring(0,1)).DiskNumber
+# Bring the disk offline
+Set-Disk -Number $diskNumber -IsOffline $true 
 
-# TODO - Wait for BitLocker to decrypt
+Start-Sleep -Seconds 5
 
 #end region bitlocker-decrypt
 #endregion main
