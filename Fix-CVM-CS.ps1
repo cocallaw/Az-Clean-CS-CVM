@@ -76,7 +76,7 @@ function Mount-OSasDataDisk {
     $disk = Get-AzDisk -ResourceGroupName $ResourceGroup -Name $NewDataDisk
     $vm = Get-AzVM -ResourceGroupName $ResourceGroup -Name $VMName
     $vm = Add-AzVMDataDisk -CreateOption Attach -Lun 0 -VM $vm -ManagedDiskId $disk.Id
-    Update-AzVM -VM $VMName -ResourceGroupName $ResourceGroup
+    Update-AzVM -VM $vm -ResourceGroupName $ResourceGroup
 }
 function UnMount-OsasDataDisk {
     param (
