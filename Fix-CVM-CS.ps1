@@ -149,8 +149,7 @@ $aDisk = $null
 foreach ($BLK in $BLKeys) {
     Write-Host "Starting work on $($BLK.DeviceName)"
     $aDisk = Swap-Disk-To-Rescue -ResourceGroup $AVDRGName -VMName $BLK.DeviceName -RescueVMName $RescueVMName -BlankDiskID $bdRID
-    $s = Invoke-AzVMRunCommand -ResourceGroupName $AVDRGName -VMName $RescueVMName -CommandId 'RunPowerShellScript' -ScriptPath $OperationsScriptPath -Parameter @{BLRecoveryKey = $BLK.RecoveryKey }
-    $s.Value[0].Message
-    Swap-Disk-From-Rescue -ResourceGroup $AVDRGName -VMName $VMName -aDiskID $aDisk -RescueVMName $RescueVMName
+    Invoke-AzVMRunCommand -ResourceGroupName $AVDRGName -VMName $RescueVMName -CommandId 'RunPowerShellScript' -ScriptPath $OperationsScriptPath -Parameter @{BLRecoveryKey = $BLK.RecoveryKey }
+    Swap-Disk-From-Rescue -ResourceGroup $AVDRGName -VMName $BLK.DeviceName -aDiskID $aDisk -RescueVMName $RescueVMName
 }
 #end region main
