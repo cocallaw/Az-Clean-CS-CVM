@@ -31,7 +31,7 @@ forEach ( $partition in $partitionlist ) {
 	$corruptFiles = "$driveLetter\Windows\System32\drivers\CrowdStrike\C-00000291*.sys"
 
 	if (Test-Path -Path $corruptFiles) {
-		Log-Info "Found crowdstrike files to cleanup, removing..."
+		Write-Host "Found crowdstrike files to cleanup, removing..."
 		Remove-Item $corruptFiles
 		$actionTaken = $true
 	}
