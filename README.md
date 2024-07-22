@@ -6,4 +6,4 @@ To use these scripts you need:
 
 ./Fix-CVM-CS.ps1 -VMListFilePath ./vmlist.txt -AVDRGName RGNAME -RescueVMName RESCUEVMNNAME -BlankDiskName BLANKDISKNAME
 
-### **These templates are intended to be used as a reference and should be tested and validated to meet your specific requirements before using in a production environment.**
+### **These scripts are intended to be used as a reference and should be tested and validated to meet your specific requirements before using in a production environment.**
