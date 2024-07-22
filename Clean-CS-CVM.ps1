@@ -21,6 +21,12 @@ function Get-Disk-Partitions() {
 #endregion functions
 #region main
 #region bitlocker-unlock
+#get all the disks and if offline bring them online
+$offlinedisks = get-disk | Where-Object { $_.OperationalStatus -eq 'Offline' }
+ForEach ($disk in $offlinedisks) {
+	Write-Host "Bringing disk $($disk.Number) online"
+	$disk | Set-Disk -IsOffline $false
+}
 $LockedDrive = Get-BitLockerVolume | Where-Object { $_.LockStatus -eq 'Locked' }
 Unlock-BitLocker -MountPoint $LockedDrive.MountPoint -RecoveryPassword $BLRecoveryKey
 #end region bitlocker-unlock
