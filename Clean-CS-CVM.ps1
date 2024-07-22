@@ -27,13 +27,15 @@ Unlock-BitLocker -MountPoint $LockedDrive.MountPoint -RecoveryPassword $BLRecove
 #region croudstrike
 $partitionlist = Get-Disk-Partitions
 forEach ( $partition in $partitionlist ) {
-	$driveLetter = ($partition.DriveLetter + ":")
-	$corruptFiles = "$driveLetter\Windows\System32\drivers\CrowdStrike\C-00000291*.sys"
-
-	if (Test-Path -Path $corruptFiles) {
-		Write-Host "Found crowdstrike files to cleanup, removing..."
-		Remove-Item $corruptFiles
-		$actionTaken = $true
+	if ($partition.DriveLetter -ne "C") {
+		$driveLetter = ($partition.DriveLetter + ":")
+		$corruptFiles = "$driveLetter\Windows\System32\drivers\CrowdStrike\C-00000291*.sys"
+	
+		if (Test-Path -Path $corruptFiles) {
+			Write-Host "Found crowdstrike files to cleanup, removing..."
+			Remove-Item $corruptFiles
+			$actionTaken = $true
+		}
 	}
 }
 if ($actionTaken) {
@@ -51,3 +53,5 @@ Disable-BitLocker -MountPoint $LockedDrive.MountPoint
 
 #end region bitlocker-decrypt
 #endregion main
+
+
