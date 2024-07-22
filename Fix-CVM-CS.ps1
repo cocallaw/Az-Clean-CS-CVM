@@ -25,7 +25,8 @@ function Swap-Disk-To-Rescue {
     #Get the properties of the OS disk on the bad VM
     $aDiskID = (get-azvm -ResourceGroupName $ResourceGroup -name $VMName).StorageProfile.OsDisk.ManagedDisk.id
     Write-Host "Swapping Disk Blank Disk in for $aDiskID on $VMName"
-    Swap-OSDisk -ResourceGroup $ResourceGroup -VMName $VMName -NewDisk $BlankDiskID
+    $bdName = ($BlankDiskID -replace '.*\/', '')
+    Swap-OSDisk -ResourceGroup $ResourceGroup -VMName $VMName -NewDisk $bdName
     Write-Host "Mounting $aDiskID as a data disk on $RescueVMName"
     Mount-OSasDataDisk -ResourceGroup $ResourceGroup -VMName $RescueVMName -NewDataDisk $aDiskID
     Write-Host "Disk $aDiskID is now mounted as a data disk on $RescueVMName"
