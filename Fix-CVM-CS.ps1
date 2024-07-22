@@ -28,7 +28,8 @@ function Swap-Disk-To-Rescue {
     $bdName = ($BlankDiskID -replace '.*\/', '')
     Swap-OSDisk -ResourceGroup $ResourceGroup -VMName $VMName -NewDisk $bdName
     Write-Host "Mounting $aDiskID as a data disk on $RescueVMName"
-    Mount-OSasDataDisk -ResourceGroup $ResourceGroup -VMName $RescueVMName -NewDataDisk $aDiskID
+    $aDiskName = ($aDiskID -replace '.*\/', '')
+    Mount-OSasDataDisk -ResourceGroup $ResourceGroup -VMName $RescueVMName -NewDataDisk $aDiskName
     Write-Host "Disk $aDiskID is now mounted as a data disk on $RescueVMName"
     return $aDiskID
 }
@@ -61,7 +62,7 @@ function Swap-OSDisk {
     Write-Host "Setting $NewDisk as the OS disk for $VMName"
     Set-AzVMOSDisk -VM $vm -ManagedDiskId $disk.Id -Name $disk.Name
     Write-Host "Updating $VMName with the new OS disk"
-    Update-AzVM -ResourceGroupName myResourceGroup -VM $vm
+    Update-AzVM -ResourceGroupName $ResourceGroup -VM $vm
 }
 function Mount-OSasDataDisk {
     param (
@@ -75,7 +76,7 @@ function Mount-OSasDataDisk {
     $disk = Get-AzDisk -ResourceGroupName $ResourceGroup -Name $NewDataDisk
     $vm = Get-AzVM -ResourceGroupName $ResourceGroup -Name $VMName
     $vm = Add-AzVMDataDisk -CreateOption Attach -Lun 0 -VM $vm -ManagedDiskId $disk.Id
-    Update-AzVM -VM $vm -ResourceGroupName $rgName
+    Update-AzVM -VM $VMName -ResourceGroupName $ResourceGroup
 }
 function UnMount-OsasDataDisk {
     param (
