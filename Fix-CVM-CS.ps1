@@ -40,11 +40,13 @@ function Swap-Disk-From-Rescue {
         [Parameter(Mandatory)]
         [string]$VMName,
         [Parameter(Mandatory)]
-        [string]$aDiskID
+        [string]$aDiskID,
+        [Parameter(Mandatory)]
+        [string]$RescueVMName
     )
-    #Get the properties of the OS disk on the bad VM
     UnMount-OsasDataDisk -ResourceGroup $ResourceGroup -VMName $RescueVMName -DataDisk $aDiskID
-    Swap-OSDisk -ResourceGroup $ResourceGroup -VMName $VMName -NewDisk $aDiskID
+    $aDiskName = ($aDiskID -replace '.*\/', '')
+    Swap-OSDisk -ResourceGroup $ResourceGroup -VMName $VMName -NewDisk $aDiskName
 }
 function Swap-OSDisk {
     param (
@@ -147,8 +149,8 @@ $aDisk = $null
 foreach ($BLK in $BLKeys) {
     Write-Host "Starting work on $($BLK.DeviceName)"
     $aDisk = Swap-Disk-To-Rescue -ResourceGroup $AVDRGName -VMName $BLK.DeviceName -RescueVMName $RescueVMName -BlankDiskID $bdRID
-    $s = Invoke-AzVMRunCommand -ResourceGroupName RGNAME -VMName VMNAME -CommandId 'RunPowerShellScript' -ScriptPath $OperationsScriptPath -Parameter @{BLRecoveryKey = $Token }
+    $s = Invoke-AzVMRunCommand -ResourceGroupName $AVDRGName -VMName $BLK.DeviceName -CommandId 'RunPowerShellScript' -ScriptPath $OperationsScriptPath -Parameter @{BLRecoveryKey = $BLK.RecoveryKey }
     $s.Value[0].Message
-    Swap-Disk-From-Rescue -ResourceGroup $AVDRGName -VMName $VMName -aDiskID $aDisk
+    Swap-Disk-From-Rescue -ResourceGroup $AVDRGName -VMName $VMName -aDiskID $aDisk -RescueVMName $RescueVMName
 }
 #end region main
