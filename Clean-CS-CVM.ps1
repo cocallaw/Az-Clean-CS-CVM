@@ -46,5 +46,8 @@ else {
 #region bitlocker-decrypt
 Write-Host "Disabling BitLocker on $($LockedDrive.MountPoint)"
 Disable-BitLocker -MountPoint $LockedDrive.MountPoint
+
+# TODO - Wait for BitLocker to decrypt
+
 #end region bitlocker-decrypt
 #endregion main
