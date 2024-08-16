@@ -9,9 +9,9 @@ param(
     [Parameter(Mandatory)]
     [string]$BlankDiskName
 )
-#end region parameters
+#endregion parameters
 #region functions
-function Swap-Disk-To-Rescue {
+function Move-DiskToRescueVM {
     param (
         [Parameter(Mandatory)]
         [string]$ResourceGroup,
@@ -22,33 +22,34 @@ function Swap-Disk-To-Rescue {
         [Parameter(Mandatory)]
         [string]$BlankDiskID
     )
-    #Get the properties of the OS disk on the bad VM
-    $aDiskID = (get-azvm -ResourceGroupName $ResourceGroup -name $VMName).StorageProfile.OsDisk.ManagedDisk.id
-    Write-Host "Swapping Disk Blank Disk in for $aDiskID on $VMName"
+    #FUNCTION INFO: Get the OS disk ID, Swap the OS disk with blank disk, Mount the original OS disk as a data disk on the rescue VM, return the original OS disk ID
+    $origDiskID = (get-azvm -ResourceGroupName $ResourceGroup -name $VMName).StorageProfile.OsDisk.ManagedDisk.id
+    Write-Host "Swapping Disk Blank Disk in for $origDiskID on $VMName"
     $bdName = ($BlankDiskID -replace '.*\/', '')
-    Swap-OSDisk -ResourceGroup $ResourceGroup -VMName $VMName -NewDisk $bdName
-    Write-Host "Mounting $aDiskID as a data disk on $RescueVMName"
-    $aDiskName = ($aDiskID -replace '.*\/', '')
+    Switch-OSDisk -ResourceGroup $ResourceGroup -VMName $VMName -NewDisk $bdName
+    Write-Host "Mounting $origDiskID as a data disk on $RescueVMName"
+    $aDiskName = ($origDiskID -replace '.*\/', '')
     Mount-OSasDataDisk -ResourceGroup $ResourceGroup -VMName $RescueVMName -NewDataDisk $aDiskName
-    Write-Host "Disk $aDiskID is now mounted as a data disk on $RescueVMName"
-    return $aDiskID
+    Write-Host "Disk $origDiskID is now mounted as a data disk on $RescueVMName"
+    return $origDiskID
 }
-function Swap-Disk-From-Rescue {
+function Move-DiskFromRescuetoOriginal {
     param (
         [Parameter(Mandatory)]
         [string]$ResourceGroup,
         [Parameter(Mandatory)]
         [string]$VMName,
         [Parameter(Mandatory)]
-        [string]$aDiskID,
+        [string]$OrigDiskID,
         [Parameter(Mandatory)]
         [string]$RescueVMName
     )
-    UnMount-OsasDataDisk -ResourceGroup $ResourceGroup -VMName $RescueVMName -DataDisk $aDiskID
-    $aDiskName = ($aDiskID -replace '.*\/', '')
-    Swap-OSDisk -ResourceGroup $ResourceGroup -VMName $VMName -NewDisk $aDiskName
+    #FUNCTION INFO: Dismount the OS disk from the rescue VM, Swap the OS disk back to the original VM replacing the blank disk
+    Dismount-OSasDataDisk -ResourceGroup $ResourceGroup -VMName $RescueVMName -DataDisk $OrigDiskID
+    $aDiskName = ($OrigDiskID -replace '.*\/', '')
+    Switch-OSDisk -ResourceGroup $ResourceGroup -VMName $VMName -NewDisk $aDiskName
 }
-function Swap-OSDisk {
+function Switch-OSDisk {
     param (
         [Parameter(Mandatory)]
         [string]$ResourceGroup,
@@ -57,14 +58,15 @@ function Swap-OSDisk {
         [Parameter(Mandatory)]
         [string]$NewDisk
     )
-    $vm = Get-AzVM -ResourceGroupName $ResourceGroup -Name $VMName
+    #FUNCTION INFO: Stop the VM, Set the new disk as the OS disk, Update the VM, Start the VM
+    $switchVM = Get-AzVM -ResourceGroupName $ResourceGroup -Name $VMName
     Write-Host "Stopping $VMName"
-    Stop-AzVM -ResourceGroupName $vm.ResourceGroupName -Name $vm.Name -Force
+    Stop-AzVM -ResourceGroupName $switchVM.ResourceGroupName -Name $switchVM.Name -Force
     $disk = Get-AzDisk -ResourceGroupName $ResourceGroup -Name $NewDisk
     Write-Host "Setting $NewDisk as the OS disk for $VMName"
-    Set-AzVMOSDisk -VM $vm -ManagedDiskId $disk.Id -Name $disk.Name
+    Set-AzVMOSDisk -VM $switchVM -ManagedDiskId $disk.Id -Name $disk.Name
     Write-Host "Updating $VMName with the new OS disk"
-    Update-AzVM -ResourceGroupName $ResourceGroup -VM $vm
+    Update-AzVM -ResourceGroupName $ResourceGroup -VM $switchVM
 }
 function Mount-OSasDataDisk {
     param (
@@ -80,7 +82,7 @@ function Mount-OSasDataDisk {
     $vm = Add-AzVMDataDisk -CreateOption Attach -Lun 0 -VM $vm -ManagedDiskId $disk.Id
     Update-AzVM -VM $vm -ResourceGroupName $ResourceGroup
 }
-function UnMount-OsasDataDisk {
+function Dismount-OSasDataDisk {
     param (
         [Parameter(Mandatory)]
         [string]$ResourceGroup,
@@ -94,19 +96,18 @@ function UnMount-OsasDataDisk {
     Remove-AzVMDataDisk -VM $vm -Name $ddname
     Update-AzVM -VM $vm -ResourceGroupName $ResourceGroup
 }
-function Get-BLKeys {
+function Get-BLRecoveryKeys {
     param (
         [Parameter(Mandatory)]
-        [string]$VMLPath
+        [string]$VMListPath
     )
-    $vmNames = Get-content -Path $VMLPath
+    #FUNCTION INFO: Get BitLocker Recovery Keys for VMs names provided in a txt file, return an array of objects with DeviceName, DeviceId, RecoveryKeyId, and RecoveryKey
+    $vmNames = Get-content -Path $VMListPath
     $devices = @()
     foreach ($vmName in $vmNames) {
         $devices += Get-MgDevice -Filter "displayName eq '$vmName'"
     }
-    # Initialize an array to store device recovery keys
     $deviceRecoveryKeys = @()
-    # Loop through each device and retrieve its BitLocker recovery keys
     foreach ($device in $devices) {
         $recoveryKeys = Get-MgInformationProtectionBitlockerRecoveryKey -Filter "deviceId eq '$($device.DeviceId)'"
         foreach ($key in $recoveryKeys) {
@@ -118,7 +119,6 @@ function Get-BLKeys {
             }
         }
     }
-    # Output the device recovery keys
     return $deviceRecoveryKeys
 }
 #end region functions
@@ -135,21 +135,27 @@ catch {
     exit
 }
 Write-Host "Getting BitLocker keys for VMs in file $VMListFilePath"
-[array]$BLKeys = Get-BLKeys -VMLPath $VMListFilePath
+try {
+    [array]$BLKeys = Get-BLRecoveryKeys -VMListPath $VMListFilePath
+}
+catch {
+    Write-Host "Failed to get BitLocker keys for VMs in file $VMListFilePath"
+    exit
+}
 Write-Host "Getting Blank Managed Disk Info for Rescue Swap"
 try {
     $bdRID = (get-azdisk -ResourceGroupName $AVDRGName -Name $BlankDiskName).Id
+    Write-Host "Using Blank Managed Disk ID: $bdRID"
 }
 catch {
     Write-Host "Failed to get Blank Managed Disk Info for Rescue Swap"
     exit
 }
-Write-Host "Using Blank Managed Disk ID: $bdRID"
 $aDisk = $null
 foreach ($BLK in $BLKeys) {
     Write-Host "Starting work on $($BLK.DeviceName)"
-    $aDisk = Swap-Disk-To-Rescue -ResourceGroup $AVDRGName -VMName $BLK.DeviceName -RescueVMName $RescueVMName -BlankDiskID $bdRID
+    $OriginalDisk = Move-DiskToRescueVM -ResourceGroup $AVDRGName -VMName $BLK.DeviceName -RescueVMName $RescueVMName -BlankDiskID $bdRID
     Invoke-AzVMRunCommand -ResourceGroupName $AVDRGName -VMName $RescueVMName -CommandId 'RunPowerShellScript' -ScriptPath $OperationsScriptPath -Parameter @{BLRecoveryKey = $BLK.RecoveryKey }
-    Swap-Disk-From-Rescue -ResourceGroup $AVDRGName -VMName $BLK.DeviceName -aDiskID [string]$aDisk -RescueVMName $RescueVMName
+    Move-DiskFromRescuetoOriginal -ResourceGroup $AVDRGName -VMName $BLK.DeviceName -OrigDiskID [string]$OriginalDisk -RescueVMName $RescueVMName
 }
 #end region main
