@@ -21,7 +21,6 @@ function Get-Disk-Partitions() {
 #endregion functions
 #region main
 #region bitlocker-unlock
-#get all the disks and if offline bring them online
 $offlinedisks = get-disk | Where-Object { $_.OperationalStatus -eq 'Offline' }
 ForEach ($disk in $offlinedisks) {
 	Write-Host "Bringing disk $($disk.Number) online"
@@ -50,7 +49,7 @@ if ($actionTaken) {
 else {
 	Write-Host "No bad crowdstrike files found"
 }
-#end region croudstrike
+#endregion croudstrike
 #region bitlocker-decrypt
 Write-Host "Disabling BitLocker on $($LockedDrive.MountPoint)"
 Disable-BitLocker -MountPoint $LockedDrive.MountPoint
@@ -61,17 +60,14 @@ while ($bitlockerStatus.VolumeStatus -ne "FullyDecrypted") {
 	$bitlockerStatus = Get-BitLockerVolume -MountPoint $LockedDrive.MountPoint
 }
 Write-Host "BitLocker has been decrypted"
+#end region bitlocker-decrypt
+#region disk-offline
 Write-Host "Bringing Disk $($LockedDrive.DriveLetter) offline"
-# Define the drive letter
 $driveLetter = $LockedDrive.DriveLetter
 # Get the disk number associated with the drive letter
-$diskNumber = (Get-Partition | Where-Object DriveLetter -eq $driveLetter.Substring(0,1)).DiskNumber
+$diskNumber = (Get-Partition | Where-Object DriveLetter -eq $driveLetter.Substring(0, 1)).DiskNumber
 # Bring the disk offline
 Set-Disk -Number $diskNumber -IsOffline $true 
-
 Start-Sleep -Seconds 5
-
-#end region bitlocker-decrypt
+#endregion disk-offline
 #endregion main
-
-
